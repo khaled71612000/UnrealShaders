@@ -10,6 +10,8 @@ public class UnrealShadersEditorTarget : TargetRules
 		Type = TargetType.Editor;
 		DefaultBuildSettings = BuildSettingsVersion.V5;
 		IncludeOrderVersion = EngineIncludeOrderVersion.Unreal5_4;
-		ExtraModuleNames.Add("UnrealShaders");
-	}
+
+        ExtraModuleNames.AddRange(new string[] { "UnrealShaders" });
+        ExtraModuleNames.Add("MyCustomRendering");
+    }
 }

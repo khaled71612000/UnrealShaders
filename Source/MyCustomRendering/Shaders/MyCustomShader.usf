@@ -1,0 +1,75 @@
+
+#include "/Engine/Public/Platform.ush"
+#include "/Engine/Private/Common.ush"
+#include "/Engine/Private/ScreenPass.ush"
+
+// Simple pass-through vertex shader in glsl
+void MainVS(
+    in float4 InPosition : ATTRIBUTE0,
+    out float4 Output : SV_POSITION
+)
+{
+    Output = InPosition;
+}
+
+// Simple solid color pixel shader
+float4 MyColor;
+float4 MainPS() : SV_Target0
+{
+    return MyColor;
+}
+//This macro
+//typically expands
+//to declarations
+//and initializationsrequired for
+//handling screen-
+//space operations.
+//It utilizes
+//the ViewParamsstructure,
+//which holdsviewport-
+//related parameters.
+
+SCREEN_PASS_TEXTURE_VIEWPORT(ViewParams)
+
+SamplerState InputSampler;
+Texture2D SceneColor;
+Texture2D InputTexture;
+Texture2D<uint2> InputStencilTexture;
+float4 Color;
+
+//a helper function to change the space of our SV_POSITION value from (0..ViewportSize) to (0..1). The values like ViewParams_ViewportMin are the ones that were declared by SCREEN_PASS_TEXTURE_VIEWPORT.
+float2 PosToUV(float2 Pos)
+{
+    float2 ViewportUV = ((Pos - ViewParams_ViewportMin.xy) * ViewParams_ViewportSizeInverse.xy);
+    return ViewportUV * ViewParams_UVViewportSize + ViewParams_UVViewportMin;
+}
+
+void UVMaskMainPS(
+	float4 SvPosition : SV_POSITION,
+	out float4 UVMask : SV_Target0,
+	out float4 CopyColor : SV_Target1
+)
+{
+    uint2 stencil = InputStencilTexture.Load(uint3(SvPosition.xy, 0));
+    float2 UV = PosToUV(SvPosition.xy);
+    if (stencil.y == 1)
+    {
+        UVMask = float4(UV.x, UV.y, 0, 1);
+    }
+    else
+    {
+        UVMask = float4(0, 0, 0, 0);
+    }
+
+    CopyColor = SceneColor.SampleLevel(InputSampler, UV, 0);
+}
+
+float4 CombineMainPS(float4 SvPosition : SV_POSITION) : SV_Target0 {
+	float2 UV = PosToUV(SvPosition.xy);
+	float4 samp = Texture2DSample(InputTexture, InputSampler, UV);
+
+	if (length(samp.xyz) > 0) {
+		return Color;
+	}
+	return Texture2DSample(SceneColor, InputSampler, UV);
+}

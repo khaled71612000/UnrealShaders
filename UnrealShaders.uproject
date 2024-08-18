@@ -8,6 +8,11 @@
 			"Name": "UnrealShaders",
 			"Type": "Runtime",
 			"LoadingPhase": "Default"
+		},
+		{
+			"Name": "MyCustomRendering",
+			"Type": "Runtime",
+			"LoadingPhase": "PostConfigInit"
 		}
 	],
 	"Plugins": [
