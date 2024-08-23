@@ -28,10 +28,11 @@
 #define MYCUSTOMRENDERING_API __declspec(dllimport)
 #endif
 
-
+//FMyViewExtension is designed to customize rendering operations like post-processing effects, viewport manipulation, or adding custom passes in the rendering pipeline.
 class MYCUSTOMRENDERING_API  FMyViewExtension : public FSceneViewExtensionBase
 {
 public:
+    //This constructor initializes the base class using FAutoRegister, a mechanism provided by Unreal to manage the lifecycle of the view extension.
 
     FMyViewExtension(const FAutoRegister& AutoRegister)
         : FSceneViewExtensionBase(AutoRegister)
