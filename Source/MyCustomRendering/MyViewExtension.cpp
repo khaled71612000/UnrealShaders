@@ -35,98 +35,51 @@ void FMyViewExtension::PostRenderBasePass_RenderThread(FRHICommandListImmediate&
 
 void FMyViewExtension::PrePostProcessPass_RenderThread(FRDGBuilder& GraphBuilder, const FSceneView& View, const FPostProcessingInputs& Inputs)
 {
-    // Check if the CustomDepthTexture format is not PF_DepthStencil.
-    // This check was necessary in UE5 because certain post-processing passes or custom render passes
-    // may require the depth buffer to have a specific format. If the format is not as expected,
-    // the function exits early to prevent rendering issues. This check may not be required in other
-    // versions, but it's kept here for backward compatibility and safety.
     if ((*Inputs.SceneTextures)->CustomDepthTexture->Desc.Format != PF_DepthStencil) return;
 
-    // Ensure that the View is actually of type FViewInfo by checking the bIsViewInfo flag.
-    // This is important because FViewInfo contains specific data and methods required for rendering.
-    // Unlike dynamic_cast, which isn't possible here due to the lack of virtual functions in FViewInfo,
-    // this check confirms the type of View safely in a performance-efficient manner.
     checkSlow(View.bIsViewInfo);
 
-    // Get the viewport rectangle of the view, which defines the area of the screen being rendered to.
-    // This is later used to correctly align the rendering and post-processing operations to the correct
-    // screen space region.
     const FIntRect Viewport = static_cast<const FViewInfo&>(View).ViewRect;
-
-    // Create a texture representation for the scene color, using the provided viewport.
-    // FScreenPassTexture is a wrapper around the scene color texture that simplifies the use of this texture
-    // in screen-space passes.
     FScreenPassTexture SceneColor((*Inputs.SceneTextures)->SceneColorTexture, Viewport);
 
-    // Retrieve the global shader map, which contains all the shaders compiled and available for use
-    // at the current RHI feature level. This is necessary to bind the correct shader during rendering.
+    if (!SceneColor.Texture)
+    {
+        return;
+    }
+
     FGlobalShaderMap* GlobalShaderMap = GetGlobalShaderMap(GMaxRHIFeatureLevel);
 
-    // Begin a new render event scope named "My Render Pass". This is useful for GPU debugging and profiling,
-    // allowing developers to identify which part of the render graph is being executed.
-    RDG_EVENT_SCOPE(GraphBuilder, "My Render Pass");
+    RDG_EVENT_SCOPE(GraphBuilder, "My Fresnel Pass");
 
-    // Viewport parameters
-    // These parameters are calculated for the scene color texture and will be used later by shaders
-    // to correctly map UVs and screen-space coordinates.
-    const FScreenPassTextureViewport SceneColorTextureViewport(SceneColor);
-    const FScreenPassTextureViewportParameters SceneTextureViewportParams = GetTextureViewportParameters(SceneColorTextureViewport);
+    TShaderMapRef<FFresnelShaderPS> FresnelShader(GlobalShaderMap);
+    FFresnelShaderPS::FParameters* Parameters = GraphBuilder.AllocParameters<FFresnelShaderPS::FParameters>();
 
-    // Render targets
-    // Create a copy of the scene color texture, which will be used in subsequent passes. 
-    // This copy allows modifications without affecting the original scene color data.
-    FScreenPassRenderTarget SceneColorCopyRenderTarget;
-    SceneColorCopyRenderTarget.Texture = GraphBuilder.CreateTexture((*Inputs.SceneTextures)->SceneColorTexture->Desc, TEXT("Scene Color Copy"));
+    Parameters->BaseTexture = View.Family->RenderTarget->GetRenderTargetTexture();
+    Parameters->BaseTextureSampler = TStaticSamplerState<SF_Trilinear>::GetRHI();
+    Parameters->HighlightColor = HighlightColor;
+    Parameters->FresnelExponent = 10.0f;
 
-    // Create a UV mask render target. This target will be used to store the results of a shader pass
-    // that generates a UV mask based on custom criteria, such as object positions or screen-space effects.
-    FScreenPassRenderTarget UVMaskRenderTarget;
-    UVMaskRenderTarget.Texture = GraphBuilder.CreateTexture((*Inputs.SceneTextures)->SceneColorTexture->Desc, TEXT("UV Mask"));
+    Parameters->View = View.ViewUniformBuffer;
+    Parameters->SceneColorTexture = SceneColor.Texture;
 
-    // Shader setup for the UV mask pass
-    // Bind the UV mask pixel shader and allocate parameters needed for this pass. The shader will use
-    // the scene color texture and the custom depth-stencil buffer to generate the UV mask.
-    TShaderMapRef<FUVMaskShaderPS> UVMaskPixelShader(GlobalShaderMap);
-    FUVMaskShaderPS::FParameters* UVMaskParameters = GraphBuilder.AllocParameters<FUVMaskShaderPS::FParameters>();
-    UVMaskParameters->SceneColor = (*Inputs.SceneTextures)->SceneColorTexture;
-    UVMaskParameters->InputStencilTexture = GraphBuilder.CreateSRV(FRDGTextureSRVDesc::CreateWithPixelFormat((*Inputs.SceneTextures)->CustomDepthTexture, PF_X24_G8));
-    UVMaskParameters->InputSampler = TStaticSamplerState<SF_Point, AM_Clamp, AM_Clamp, AM_Clamp>::GetRHI();
-    UVMaskParameters->ViewParams = SceneTextureViewportParams;
-    UVMaskParameters->RenderTargets[0] = UVMaskRenderTarget.GetRenderTargetBinding();
-    UVMaskParameters->RenderTargets[1] = SceneColorCopyRenderTarget.GetRenderTargetBinding();
+    // Bind the output render target to the graph parameters
+    FRDGTextureRef OutputTexture = GraphBuilder.CreateTexture(
+        FRDGTextureDesc::Create2D(Viewport.Size(), PF_B8G8R8A8, FClearValueBinding::Black, TexCreate_RenderTargetable),
+        TEXT("OutputRenderTarget"));
 
-    // Add a full-screen pass to the render graph using the UV mask pixel shader.
-    // This pass will process the entire screen and output the UV mask and the scene color copy.
+    Parameters->RenderTargets[0] = FRenderTargetBinding(OutputTexture, ERenderTargetLoadAction::ELoad);
+
+    // Add fullscreen pass to the render graph using the Fresnel pixel shader
     FPixelShaderUtils::AddFullscreenPass(
         GraphBuilder,
         GlobalShaderMap,
-        FRDGEventName(TEXT("UV Mask")),
-        UVMaskPixelShader,
-        UVMaskParameters,
-        Viewport);
-
-    // Shader setup for the combination pass
-    // Bind the combine pixel shader, which takes the UV mask and scene color copy as inputs.
-    // This shader applies a color highlight based on the UV mask and writes the result back to the scene color.
-    TShaderMapRef<FCombineShaderPS> CombinePixelShader(GlobalShaderMap);
-    FCombineShaderPS::FParameters* CombineParameters = GraphBuilder.AllocParameters<FCombineShaderPS::FParameters>();
-    CombineParameters->SceneColor = SceneColorCopyRenderTarget.Texture;
-    CombineParameters->InputTexture = UVMaskRenderTarget.Texture;
-    CombineParameters->InputSampler = TStaticSamplerState<SF_Point, AM_Clamp, AM_Clamp, AM_Clamp>::GetRHI();
-    CombineParameters->Color = HighlightColor;
-    CombineParameters->ViewParams = SceneTextureViewportParams;
-    CombineParameters->RenderTargets[0] = FRenderTargetBinding(SceneColor.Texture, ERenderTargetLoadAction::ELoad);
-
-    // Add another full-screen pass to the render graph using the combine pixel shader.
-    // This pass merges the highlighted UV areas back into the scene color texture.
-    FPixelShaderUtils::AddFullscreenPass(
-        GraphBuilder,
-        GlobalShaderMap,
-        FRDGEventName(TEXT("Combine")),
-        CombinePixelShader,
-        CombineParameters,
-        Viewport);
+        RDG_EVENT_NAME("FresnelEffect"),
+        FresnelShader,
+        Parameters,
+        Viewport
+    );
 }
+
 
 FScreenPassTextureViewportParameters FMyViewExtension::GetTextureViewportParameters(const FScreenPassTextureViewport& InViewport) {
     // Initialize the viewport parameters based on the input viewport, which represents a section of the screen.

@@ -22,10 +22,12 @@
 //}
 
 
+#ifndef MYCUSTOMRENDERING_API
 #ifdef MYCUSTOMRENDERING_EXPORTS
 #define MYCUSTOMRENDERING_API __declspec(dllexport)
 #else
 #define MYCUSTOMRENDERING_API __declspec(dllimport)
+#endif
 #endif
 
 //FMyViewExtension is designed to customize rendering operations like post-processing effects, viewport manipulation, or adding custom passes in the rendering pipeline.
