@@ -3,6 +3,9 @@
 # 🔆 Custom Shader Rendering in Unreal Engine
 **Modular Global Shader Framework with Custom Passes, View Extensions, and Real-Time Effects**
 
+![GIF](https://media2.giphy.com/media/v1.Y2lkPTc5MGI3NjExYTUwcWZzZ2M2ZGtoN3A4Ynl4b3h0bGQzeXJyOW5uYWVpc2o4dHJ6NiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/aIkzoYqd5xAlvqSSqI/giphy.gif)
+
+
 ---
 
 ## 🎯 Overview
