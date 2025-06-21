@@ -89,5 +89,6 @@ Initializes shader classes, registers your rendering logic, and ensures module s
 - 🎓 **Lens Flare Rendering in UE** by [Froyok](https://www.froyok.fr/blog/2021-09-ue4-custom-lens-flare/)
 - 📘 Unreal Engine Shader Development Docs
 
+[YouTube Video](https://youtu.be/WEz9c_5ZCi0?si=ypih-YPkDFLmIKEU)
 ![image](https://github.com/user-attachments/assets/54e59fbc-bce7-4369-8be7-58d9161348c3)
 ![image](https://github.com/user-attachments/assets/9b254bff-2229-4ec2-b425-2e2f5158a890)
